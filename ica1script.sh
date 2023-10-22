@@ -45,10 +45,12 @@ done < ${PWD}/fastq/sequence_file.txt
 unset IFS
 
 # 4 generate counts data using bedtools
-IFS=$'_'
+
 rm -fr ${PWD}/genecounts
 mkdir ${PWD}/genecounts
-genecounts=${PWD}/genecounts
+genecounts="${PWD}/genecounts"
+
+IFS=$'_'
 while read Tcopart1 Tcopart2
 do
 bedtools coverage -a TriTrypDB-46_TcongolenseIL3000_2019.bed -b ${PWD}/fastq/alignoutput/${Tcopart1}_sort.bam > ${genecounts}/${Tcopart1}.gene.counts.txt
@@ -60,87 +62,64 @@ unset IFS
 # 5.1 group the samples
 
 rm -fr ${PWD}/group
-
 # create a folder for grouping
 mkdir ${PWD}/group
-group=${PWD}/group
+group="${PWD}/group"
 
-# create three arrays for loop generation of grouping files
+# create two arrays for loop generation of grouping files
 sampletype=("Clone1" "Clone2" "WT")
 sampletime=("0" "24" "48")
-treatment=("Uninduced" "Induced")
+# treatment=("Uninduced" "Induced")
 for item1 in "${sampletype[@]}"
 do
     for item2 in "${sampletime[@]}"
     do
-		for item3 in "${treatment[@]}"
-		do
-		cat ${PWD}/fastq/Tco2.fqfiles |grep -w "$item1" | grep -w "$item2" | grep -w "$item3" | cut -f1 >> ${group}/"$item1"_"$item2"_"$item3"
-		done
+	cat ${PWD}/fastq/Tco2.fqfiles |grep -w "$item1" | grep -w "$item2" | cut -f1 >> ${group}/"$item1"_"$item2".temp
+	cat ${group}/"$item1"_"$item2".temp | awk '{gsub("Tco", "Tco-"); print}' > ${group}/"$item1"_"$item2".txt
+	rm -f ${group}/*temp
 	done
 done
 
 # delete empty files
 find ${group}/ -type f -empty -delete
 
-# Create a file that records the results of the grouping
-for item in $(ls ${group})
-do
-echo "$item" >> ${group}/groupinfo1.txt
-paste -s ${group}/$item >> ${group}/groupinfo2.txt
-done
-
-paste ${group}/groupinfo1.txt ${group}/groupinfo2.txt > ${group}/groupinfo3.txt
-awk '{gsub("Tco", "Tco-"); print}' ${group}/groupinfo3.txt > ${group}/groupinfo.txt
-
-rm -f ${group}/groupinfo1.txt ${group}/groupinfo2.txt ${group}/groupinfo3.txt
-
 # 5.2 create gene descriptions file
-echo -e "name\tgene_description" > ${genecounts}/gene_descriptions.txt
-cut -f4,5 ${PWD}/TriTrypDB-46_TcongolenseIL3000_2019.bed >> ${genecounts}/gene_descriptions.txt
+
+# clear the previous results
+rm -fr ${PWD}/average
+# create a folder for grouping
+mkdir ${PWD}/average
+average="${PWD}/average"
+
+cut -f4,5 ${PWD}/TriTrypDB-46_TcongolenseIL3000_2019.bed > ${average}/gene_descriptions.txt
 
 # 5.3 calculate the mean expression levels for each group and add gene descriptions
 
-for item in $(ls ${genecounts} | grep "txt")
-do
-cut -f6 ${genecounts}/$item > ${genecounts}/cut.$item
-done
-
-# clear the previous results
-rm -f ${genecounts}/*ed*
-
-
-# the main purpose for this loop: 
-# 1) extract the sixth column of each bedtools output file 
-# 2) paste them together according to grouping outcomes 
+# 1) extract the sixth column of each bedtools output file
+# 2) paste them together according to grouping outcomes
 # 3) calculate the mean expression levels
 # 4) add gene descriptions
 
-IFS=$'\t';
-while read groupname item1 item2 item3 item4
+for item in $(ls ${group})
 do
-# based on the sample items of each group, there are two conditions : 3 items and 4 items
-# if there are 3 items
-if test -z $item4;
-then
-# create a header of each group counts file
-echo -e "$item1\t$item2\t$item3" > ${genecounts}/${groupname}.temp1
-# according to the group, paste the gene counts files together
-paste ${genecounts}/cut.$item1.gene.counts.txt ${genecounts}/cut.$item2.gene.counts.txt ${genecounts}/cut.$item3.gene.counts.txt >> ${genecounts}/${groupname}.temp1
-# calculate the average of counts for each group
-cat ${genecounts}/${groupname}.temp1 | source ${genecounts}/average.sh > ${genecounts}/${groupname}.temp2
-# Merge the gene description file and the average of the expression levels file
-paste ${genecounts}/gene_descriptions.txt ${genecounts}/${groupname}.temp2 > ${genecounts}/${groupname}.counts
+touch ${average}/${item}.outputfile
+	lines=()
+	while read line
+	do
+	cut -f6 ${genecounts}/${line}.gene.counts.txt > ${average}/cut.${line}
+	lines+=("$line")
+	done < ${group}/${item}
+	output="${average}/${item}.outputfile"
+	for ((i = 0; i < ${#lines[@]}; i++))
+	do
+		currentfile="${average}/cut.${lines[i]}"
+		paste "$currentfile" "$output" > ${average}/temp.txt
+		mv ${average}/temp.txt ${output}
+	done
+	cat ${output} | source ${PWD}/average.sh > ${average}/avgtemp.${item}
+	# add header for the
+	echo -e "name\tdescriptions\taverage" > ${average}/avg.${item}
+	paste ${average}/gene_descriptions.txt ${average}/avgtemp.${item} >>  ${average}/avg.${item}
+done
 
-# if there are 4 items
-else
-echo -e "$item1\t$item2\t$item3\t$item4" > ${genecounts}/${groupname}.temp1
-paste ${genecounts}/cut.$item1.gene.counts.txt ${genecounts}/cut.$item2.gene.counts.txt ${genecounts}/cut.$item3.gene.counts.txt ${genecounts}/cut.$item4.gene.counts.txt >> ${genecounts}/${groupname}.temp1
-cat ${genecounts}/${groupname}.temp1 | source ${genecounts}/average.sh > ${genecounts}/${groupname}.temp2
-paste ${genecounts}/gene_descriptions.txt ${genecounts}/${groupname}.temp2 > ${genecounts}/${groupname}.counts
-fi
-done < ${group}/groupinfo.txt
-
-unset IFS
-
-rm -f ${genecounts}/cut* ${genecounts}/temp*
+rm -f ${average}/*temp* ${average}/*cut* ${average}/*output*
