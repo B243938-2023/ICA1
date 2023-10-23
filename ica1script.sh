@@ -125,22 +125,28 @@ done
 rm -f ${average}/*temp* ${average}/*cut* ${average}/*output*
 
 # 6 calculate the fold change -- compared to the WT control group over time
+
 rm -fr ${PWD}/foldchange
 # create a folder for grouping
 mkdir ${PWD}/foldchange
 foldchange="${PWD}/foldchange"
 
+# paste the column together for further calculate
 for item1 in "Clone1" "Clone2"
-do
+do 
 	for item2 in "0" "24" "48"
 	do
 	paste <(cut -f3 ${average}/avg."${item1}"_"${item2}".txt) <(cut -f3 ${average}/avg.WT_"${item2}".txt) > ${foldchange}/"${item1}"-WT."${item2}"
 	done
 done
 
+# calculate the foldchange compared to the wild type group
+# sort the log2foldchange decreasing order
 for item in $(ls $foldchange | grep "-")
-do
-	cat ${foldchange}/${item} | source foldchange.sh > ${foldchange}/${item}.foldchange.temp
-	echo -e "name\tdescriptions\tfoldchange" > ${foldchange}/${item}.foldchange.txt
-	paste ${average}/gene_descriptions.txt ${foldchange}/${item}.foldchange.temp >>  ${foldchange}/${item}.foldchange.txt
+do 
+	cat ${foldchange}/${item} | source foldchange.sh > ${foldchange}/${item}.fc.temp
+	paste ${average}/gene_descriptions.txt ${foldchange}/${item}.fc.temp > ${foldchange}/${item}.fc.txt
+	sort -k3,3 -nr -t$'\t' ${foldchange}/${item}.fc.txt > ${foldchange}/${item}.fc.sorted
 done
+
+rm -f ${foldchange}/*temp
