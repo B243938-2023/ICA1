@@ -14,7 +14,25 @@ mkdir ${PWD}/qcoutput
 # the input data is FASTQ format, so use "-f fastq" ; not extracts the data files; outputfile is 'outputdir'
 fastqc -f fastq -noextract -t 8 -o ${PWD}/qcoutput ${PWD}/fastq/*.gz
 
-# 2 assess
+# 2 assess the qc outcomes
+
+#uncompress the fastqc output
+unzip -q -d ${PWD}/qcoutput/ './qcoutput/*.zip'
+
+qcoutcomes=$(ls -d ${PWD}/qcoutput/*fastqc)
+
+for qcoutcome in ${qcoutcomes};
+	do
+ 	{
+	echo 'quality control results: '${qcoutcome}' ';
+	grep -i 'filename' ${qcoutcome}/fastqc_data.txt;
+	echo "FAIL :";
+	grep 'fail' ${qcoutcome}/fastqc_data.txt;
+	echo "WARN :";
+	grep 'warn' ${qcoutcome}/fastqc_data.txt;
+	} >> ${PWD}/qcoutput/fastqc_summary.txt
+done
+
 
 # 3 bowtie2 mapping; convert outputfile to bam format and sort
 
